@@ -16,10 +16,10 @@
   "enable_hover": true,
   "enable_snippets": true,
   "verbose": true,
-  "checker_args": "-vet-shadowing",
+  "checker_args": "-vet-shadowing -vet-style -ignore-unknown-attributes",
   "profile": "main",
   "profiles":
   [
-    {"name": "main", "checker_path": ["src"]}
+    {"name": "main", "checker_path": ["src", "src/meta"]}
   ]
 }

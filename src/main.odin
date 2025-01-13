@@ -28,14 +28,13 @@ main :: proc()
 
   sample_count := wav_file.header.data_size / u32(wav_file.header.block_align)
   samples := slice.reinterpret([]i16, wav_file.data)
-  // slice.fill(samples[len(samples)-int(wav_file.header.samples_per_sec)/2:], 0)
 
   ma_result: ma.result
 
   audio_buffer: ma.audio_buffer
   audio_buffer_config := ma.audio_buffer_config_init(format = .s16,
                                                      channels = 2,
-                                                     sizeInFrames = u64(len(samples))/2,
+                                                     sizeInFrames = u64(len(samples))/2 - 1000,
                                                      pData = raw_data(samples),
                                                      pAllocationCallbacks = nil)
   ma_result = ma.audio_buffer_init(&audio_buffer_config, &audio_buffer)
@@ -45,7 +44,7 @@ main :: proc()
     println("Failed to initialize buffer. Exiting.")
     return
   }
-  
+
   device: ma.device
   device_config := ma.device_config_init(.playback)
   device_config.playback.format = .s16
@@ -53,7 +52,7 @@ main :: proc()
   device_config.sampleRate = wav_file.header.samples_per_sec
   device_config.dataCallback = data_cb
   device_config.pUserData = &audio_buffer
-  
+
   ma_result = ma.device_init(nil, &device_config, &device)
   defer ma.device_uninit(&device)
   if ma_result != .SUCCESS
@@ -84,7 +83,7 @@ sine_tone :: proc() -> WAV_File
   for sample_idx := 0; sample_idx < len(samples); sample_idx += 1
   {
     sample := &samples[sample_idx]
-    sample^ = cast(i16) (math.sin(f32(sample_idx) * 0.05) * (2 << 10) + 1024)
+    sample^ = cast(i16) ((math.sin(f32(sample_idx) * 0.05) * (2 << 10) + 1024) * 0.5)
   }
 
   wav_file.data = slice.reinterpret([]byte, samples)
