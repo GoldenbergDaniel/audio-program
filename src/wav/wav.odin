@@ -1,4 +1,4 @@
-package main
+package wav
 
 import "base:runtime"
 import "core:fmt"
@@ -8,13 +8,13 @@ import "core:slice"
 import "src:basic/bytes"
 import "src:basic/mem"
 
-WAV_File :: struct
+File :: struct
 {
-  header: WAV_Header,
+  header: Header,
   data:   []byte,
 }
 
-WAV_Header :: struct #packed
+Header :: struct #packed
 {
   riff:             [4]byte,
   file_size:        u32,
@@ -31,7 +31,7 @@ WAV_Header :: struct #packed
   data_size:        u32,
 }
 
-WAV_HEADER_DEFAULT :: WAV_Header{
+HEADER_DEFAULT :: Header{
   riff             = {82, 73, 70, 70},
   wave             = {87, 65, 86, 69},
   fmt              = {102, 109, 116, 32},
@@ -45,29 +45,29 @@ WAV_HEADER_DEFAULT :: WAV_Header{
   data_desc        = {100, 97, 116, 97},
 }
 
-wav_load :: proc
+load :: proc
 {
-  wav_load_from_file,
-  wav_load_from_buffer,
+  load_from_file,
+  load_from_buffer,
 }
 
-wav_load_from_file :: proc(path: string) -> WAV_File
+load_from_file :: proc(path: string, arena: ^mem.Arena) -> File
 {
-  file_data, _ := os.read_entire_file(path)
-  return wav_load_from_buffer(file_data)
+  file_data, _ := os.read_entire_file(path, mem.allocator(arena))
+  return load_from_buffer(file_data, arena)
 }
 
-wav_load_from_buffer :: proc(wav_bytes: []byte) -> WAV_File
+load_from_buffer :: proc(wav_bytes: []byte, arena: ^mem.Arena) -> File
 {
-  result: WAV_File
+  result: File
   wav_data_buffer := bytes.make_buffer(wav_bytes, .LE)
 
-  header: WAV_Header
+  header: Header
   {
-    copy(header.riff[:], bytes.read_bytes(&wav_data_buffer, size_of(WAV_Header{}.riff)))
+    copy(header.riff[:], bytes.read_bytes(&wav_data_buffer, size_of(Header{}.riff)))
     header.file_size = bytes.read_u32(&wav_data_buffer)
-    copy(header.wave[:], bytes.read_bytes(&wav_data_buffer, size_of(WAV_Header{}.wave)))
-    copy(header.fmt[:], bytes.read_bytes(&wav_data_buffer, size_of(WAV_Header{}.fmt)))
+    copy(header.wave[:], bytes.read_bytes(&wav_data_buffer, size_of(Header{}.wave)))
+    copy(header.fmt[:], bytes.read_bytes(&wav_data_buffer, size_of(Header{}.fmt)))
     header.wav_section_size = bytes.read_u32(&wav_data_buffer)
     header.type = bytes.read_u16(&wav_data_buffer)
     header.channels = bytes.read_u16(&wav_data_buffer)
@@ -75,12 +75,12 @@ wav_load_from_buffer :: proc(wav_bytes: []byte) -> WAV_File
     header.bytes_per_sec = bytes.read_u32(&wav_data_buffer)
     header.block_align = bytes.read_u16(&wav_data_buffer)
     header.bits_per_sample = bytes.read_u16(&wav_data_buffer)
-    copy(header.data_desc[:], bytes.read_bytes(&wav_data_buffer, size_of(WAV_Header{}.data_desc)))
+    copy(header.data_desc[:], bytes.read_bytes(&wav_data_buffer, size_of(Header{}.data_desc)))
     header.data_size = bytes.read_u32(&wav_data_buffer)
   }
 
   data_start_idx := wav_data_buffer.r_pos
-  data: []byte = slice.clone(wav_data_buffer.data[data_start_idx:])
+  data: []byte = slice.clone(wav_data_buffer.data[data_start_idx:], mem.allocator(arena))
 
   return {
     header = header,
@@ -88,23 +88,23 @@ wav_load_from_buffer :: proc(wav_bytes: []byte) -> WAV_File
   }
 }
 
-wav_write :: proc
+write :: proc
 {
-  wav_write_to_file,
-  wav_write_to_buffer,
+  write_to_file,
+  write_to_buffer,
 }
 
-wav_write_to_file :: proc(wav: WAV_File, path: string)
+write_to_file :: proc(path: string, wav: File)
 {
   temp := mem.scope_temp(mem.get_scratch())
 
-  raw_bytes := make([]byte, size_of(wav.header) + len(wav.data))
-  wav_write_to_buffer(wav, raw_bytes)
+  raw_bytes := make([]byte, size_of(wav.header) + len(wav.data), mem.allocator(temp.arena))
+  write_to_buffer(raw_bytes, wav)
 
   os.write_entire_file(path, raw_bytes)
 }
 
-wav_write_to_buffer :: proc(wav: WAV_File, buf: []byte)
+write_to_buffer :: proc(buf: []byte, wav: File)
 {
   wav := wav
   

@@ -1,4 +1,25 @@
+#!/bin/bash
 set -e
 
-/home/dg/tools/odin_dev/odin build src -out:out/miniaudio-test -o:none -use-separate-modules -vet-style -vet-shadowing -linker:mold -collection:src=src -collection:ext=ext
-out/miniaudio-test
+# --- CONFIGURE --------------------------------------------------------------------------
+
+MODE="debug"
+if [[ $1 == "debug" || $1 == "release" ]]; then MODE=$1; fi
+
+TARGET="linux_amd64"
+if [[ $2 == "darwin_amd64" || $2 == "darwin_arm64" || $2 == "linux_amd64" ]]; then TARGET=$2; fi
+
+FLAGS="-collection:src=src -collection:ext=ext -vet-style -vet-cast -extra-linker-flags:\"-fuse-ld=mold\" $3"
+if [[ $MODE == "debug"   ]]; then FLAGS="-o:none -debug -use-separate-modules $FLAGS"; fi
+if [[ $MODE == "release" ]]; then FLAGS="-o:speed -no-bounds-check -no-type-assert $FLAGS"; fi
+
+echo [target:$TARGET]
+echo [mode:$MODE]
+
+# --- BUILD ------------------------------------------------------------------------------
+
+echo [build]
+
+mkdir -p out
+odin build src -out:out/audio-program -target:$TARGET $FLAGS
+if [[ $MODE == "debug" ]]; then out/audio-program; fi

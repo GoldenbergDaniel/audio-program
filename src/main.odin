@@ -1,31 +1,30 @@
 package main
 
 import "base:builtin"
-import "core:fmt"
+import "base:runtime"
 import "core:math"
 import "core:slice"
 import "core:os"
 
 import "src:basic/bytes"
 import "src:basic/mem"
+import "src:wav"
 import ma "ext:miniaudio"
-
-print   :: fmt.print
-println :: fmt.println
 
 main :: proc()
 {
+  context.allocator = runtime.panic_allocator()
+
   perm_arena: mem.Arena
   mem.init_arena_static(&perm_arena)
-  context.allocator = mem.allocator(&perm_arena)
-
-  wav_write(sine_tone(), "test/out_0.wav")
-  wav_file := wav_load("test/out_0.wav")
+  
+  wav.write("res/out_0.wav", sine_tone(&perm_arena))
+  wav_file := wav.load("res/out_0.wav", &perm_arena)
   // println(wav_file.header)
   assert(wav_file.header.type == 1)
   assert(wav_file.header.channels == 2)
   assert(wav_file.header.bits_per_sample == 16)
-
+  
   sample_count := wav_file.header.data_size / u32(wav_file.header.block_align)
   samples := slice.reinterpret([]i16, wav_file.data)
 
@@ -74,12 +73,18 @@ main :: proc()
   os.read(os.stdin, terminal_input[:])  
 }
 
-sine_tone :: proc() -> WAV_File
+data_cb :: proc "c" (device: ^ma.device, output, input: rawptr, frame_count: u32)
 {
-  wav_file: WAV_File
-  wav_file.header = WAV_HEADER_DEFAULT
+  audio_buffer := cast(^ma.audio_buffer) device.pUserData
+  ma.audio_buffer_read_pcm_frames(audio_buffer, output, u64(frame_count), false)
+}
 
-  samples := make([]i16, WAV_HEADER_DEFAULT.samples_per_sec * 6)
+sine_tone :: proc(arena: ^mem.Arena) -> wav.File
+{
+  wav_file: wav.File
+  wav_file.header = wav.HEADER_DEFAULT
+
+  samples := make([]i16, wav_file.header.samples_per_sec * 6, mem.allocator(arena))
   for sample_idx := 0; sample_idx < len(samples); sample_idx += 1
   {
     sample := &samples[sample_idx]
@@ -89,10 +94,4 @@ sine_tone :: proc() -> WAV_File
   wav_file.data = slice.reinterpret([]byte, samples)
 
   return wav_file
-}
-
-data_cb :: proc "c" (device: ^ma.device, output, input: rawptr, frame_count: u32)
-{
-  audio_buffer := cast(^ma.audio_buffer) device.pUserData
-  ma.audio_buffer_read_pcm_frames(audio_buffer, output, u64(frame_count), false)
 }
